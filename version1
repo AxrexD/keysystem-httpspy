@@ -1,0 +1,351 @@
+-- Nexbyte HTTP Spy
+-- Monitors all HTTP requests in the background
+
+local HttpSpy = {}
+local LoggedRequests = {}
+
+-- Get HttpService
+local HttpService = game:GetService("HttpService")
+
+-- Log function
+local function LogRequest(method, url, data, headers)
+    local logEntry = {
+        Method = method,
+        URL = url,
+        Data = data,
+        Headers = headers,
+        Time = os.date("%H:%M:%S")
+    }
+    table.insert(LoggedRequests, logEntry)
+    
+    warn("[NEXBYTE HTTP SPY] " .. method .. " -> " .. url)
+    if data then
+        print("[DATA]", tostring(data))
+    end
+    if headers then
+        pcall(function()
+            print("[HEADERS]", HttpService:JSONEncode(headers))
+        end)
+    end
+    
+    -- Add to UI
+    if HttpSpy.AddToUI then
+        pcall(function()
+            HttpSpy.AddToUI(method, url, data)
+        end)
+    end
+end
+
+-- Hook functions using hookfunction
+if hookfunction then
+    -- GetAsync hook
+    local OldGetAsync = hookfunction(HttpService.GetAsync, function(self, url, ...)
+        LogRequest("GET", url, nil, nil)
+        return OldGetAsync(self, url, ...)
+    end)
+    
+    -- PostAsync hook
+    local OldPostAsync = hookfunction(HttpService.PostAsync, function(self, url, data, ...)
+        LogRequest("POST", url, data, nil)
+        return OldPostAsync(self, url, data, ...)
+    end)
+    
+    -- RequestAsync hook
+    local OldRequestAsync = hookfunction(HttpService.RequestAsync, function(self, options, ...)
+        local url = options.Url or "Unknown"
+        local method = options.Method or "Unknown"
+        LogRequest(method, url, options.Body, options.Headers)
+        return OldRequestAsync(self, options, ...)
+    end)
+end
+
+-- request/http_request hook
+local OriginalRequest = request or http_request or (syn and syn.request)
+if OriginalRequest and hookfunction then
+    local OldRequest = hookfunction(OriginalRequest, function(options)
+        local url = options.Url or "Unknown"
+        local method = options.Method or "GET"
+        LogRequest(method, url, options.Body, options.Headers)
+        return OldRequest(options)
+    end)
+    print("[NEXBYTE HTTP SPY] request() hooked")
+elseif OriginalRequest then
+    -- Fallback: global override
+    local function NewRequest(options)
+        local url = options.Url or "Unknown"
+        local method = options.Method or "GET"
+        LogRequest(method, url, options.Body, options.Headers)
+        return OriginalRequest(options)
+    end
+    
+    getgenv().request = NewRequest
+    getgenv().http_request = NewRequest
+    if syn then
+        syn.request = NewRequest
+    end
+    print("[NEXBYTE HTTP SPY] request() global override")
+end
+
+-- Log access functions
+function HttpSpy:GetLogs()
+    return LoggedRequests
+end
+
+function HttpSpy:ClearLogs()
+    LoggedRequests = {}
+    print("[NEXBYTE HTTP SPY] Logs cleared")
+end
+
+function HttpSpy:PrintLogs()
+    print("=== NEXBYTE HTTP SPY LOGS ===")
+    for i, log in ipairs(LoggedRequests) do
+        print(string.format("[%d] %s | %s -> %s", i, log.Time, log.Method, log.URL))
+    end
+    print("=== TOTAL: " .. #LoggedRequests .. " requests ===")
+end
+
+function HttpSpy:GetLastLog()
+    return LoggedRequests[#LoggedRequests]
+end
+
+print("[Nexbyte HTTP Spy] Loaded - Monitoring all HTTP requests...")
+print("[Nexbyte HTTP Spy] Usage: HttpSpy:PrintLogs() - Show logs")
+
+-- Create UI
+task.spawn(function()
+    local ScreenGui = Instance.new("ScreenGui")
+    local MainFrame = Instance.new("Frame")
+    local UICorner = Instance.new("UICorner")
+    local Title = Instance.new("TextLabel")
+    local TitleCorner = Instance.new("UICorner")
+    local LogFrame = Instance.new("ScrollingFrame")
+    local LogFrameCorner = Instance.new("UICorner")
+    local UIListLayout = Instance.new("UIListLayout")
+    local ClearButton = Instance.new("TextButton")
+    local ClearCorner = Instance.new("UICorner")
+    local CloseButton = Instance.new("TextButton")
+    local CloseCorner = Instance.new("UICorner")
+    local MinimizeButton = Instance.new("TextButton")
+    local MinCorner = Instance.new("UICorner")
+    local CountLabel = Instance.new("TextLabel")
+    
+    ScreenGui.Name = "NexbyteHttpSpyUI"
+    ScreenGui.Parent = game.CoreGui
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Main Frame
+    MainFrame.Name = "MainFrame"
+    MainFrame.Parent = ScreenGui
+    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Position = UDim2.new(0.3, 0, 0.2, 0)
+    MainFrame.Size = UDim2.new(0, 650, 0, 450)
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    
+    UICorner.CornerRadius = UDim.new(0, 10)
+    UICorner.Parent = MainFrame
+    
+    -- Title Bar
+    Title.Name = "Title"
+    Title.Parent = MainFrame
+    Title.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    Title.BorderSizePixel = 0
+    Title.Size = UDim2.new(1, 0, 0, 45)
+    Title.Font = Enum.Font.GothamBold
+    Title.Text = "  NEXBYTE HTTP SPY"
+    Title.TextColor3 = Color3.fromRGB(100, 200, 255)
+    Title.TextSize = 20
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+    
+    TitleCorner.CornerRadius = UDim.new(0, 10)
+    TitleCorner.Parent = Title
+    
+    -- Close Button
+    CloseButton.Name = "CloseButton"
+    CloseButton.Parent = MainFrame
+    CloseButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+    CloseButton.BorderSizePixel = 0
+    CloseButton.Position = UDim2.new(1, -40, 0, 7)
+    CloseButton.Size = UDim2.new(0, 32, 0, 32)
+    CloseButton.Font = Enum.Font.GothamBold
+    CloseButton.Text = "X"
+    CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CloseButton.TextSize = 16
+    
+    CloseCorner.CornerRadius = UDim.new(0, 6)
+    CloseCorner.Parent = CloseButton
+    
+    -- Minimize Button
+    MinimizeButton.Name = "MinimizeButton"
+    MinimizeButton.Parent = MainFrame
+    MinimizeButton.BackgroundColor3 = Color3.fromRGB(50, 120, 220)
+    MinimizeButton.BorderSizePixel = 0
+    MinimizeButton.Position = UDim2.new(1, -78, 0, 7)
+    MinimizeButton.Size = UDim2.new(0, 32, 0, 32)
+    MinimizeButton.Font = Enum.Font.GothamBold
+    MinimizeButton.Text = "-"
+    MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MinimizeButton.TextSize = 20
+    
+    MinCorner.CornerRadius = UDim.new(0, 6)
+    MinCorner.Parent = MinimizeButton
+    
+    -- Count Label
+    CountLabel.Name = "CountLabel"
+    CountLabel.Parent = MainFrame
+    CountLabel.BackgroundTransparency = 1
+    CountLabel.Position = UDim2.new(0, 15, 0, 55)
+    CountLabel.Size = UDim2.new(0, 200, 0, 25)
+    CountLabel.Font = Enum.Font.Gotham
+    CountLabel.Text = "Requests: 0"
+    CountLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    CountLabel.TextSize = 14
+    CountLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    -- Log Frame
+    LogFrame.Name = "LogFrame"
+    LogFrame.Parent = MainFrame
+    LogFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    LogFrame.BorderSizePixel = 0
+    LogFrame.Position = UDim2.new(0, 15, 0, 85)
+    LogFrame.Size = UDim2.new(1, -30, 1, -135)
+    LogFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    LogFrame.ScrollBarThickness = 6
+    LogFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 200, 255)
+    
+    LogFrameCorner.CornerRadius = UDim.new(0, 8)
+    LogFrameCorner.Parent = LogFrame
+    
+    UIListLayout.Parent = LogFrame
+    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    UIListLayout.Padding = UDim.new(0, 8)
+    
+    -- Clear Button
+    ClearButton.Name = "ClearButton"
+    ClearButton.Parent = MainFrame
+    ClearButton.BackgroundColor3 = Color3.fromRGB(220, 120, 50)
+    ClearButton.BorderSizePixel = 0
+    ClearButton.Position = UDim2.new(0, 15, 1, -40)
+    ClearButton.Size = UDim2.new(0, 120, 0, 32)
+    ClearButton.Font = Enum.Font.GothamBold
+    ClearButton.Text = "Clear Logs"
+    ClearButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ClearButton.TextSize = 14
+    
+    ClearCorner.CornerRadius = UDim.new(0, 6)
+    ClearCorner.Parent = ClearButton
+    
+    -- Add log to UI function
+    local function AddLogToUI(method, url, data)
+        local LogEntry = Instance.new("Frame")
+        local EntryCorner = Instance.new("UICorner")
+        local MethodLabel = Instance.new("TextLabel")
+        local URLLabel = Instance.new("TextLabel")
+        local TimeLabel = Instance.new("TextLabel")
+        local CopyButton = Instance.new("TextButton")
+        local CopyCorner = Instance.new("UICorner")
+        
+        LogEntry.Name = "LogEntry"
+        LogEntry.Parent = LogFrame
+        LogEntry.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+        LogEntry.BorderSizePixel = 0
+        LogEntry.Size = UDim2.new(1, -10, 0, 70)
+        
+        EntryCorner.CornerRadius = UDim.new(0, 6)
+        EntryCorner.Parent = LogEntry
+        
+        TimeLabel.Parent = LogEntry
+        TimeLabel.BackgroundTransparency = 1
+        TimeLabel.Position = UDim2.new(0, 10, 0, 5)
+        TimeLabel.Size = UDim2.new(0, 80, 0, 18)
+        TimeLabel.Font = Enum.Font.GothamBold
+        TimeLabel.Text = os.date("%H:%M:%S")
+        TimeLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+        TimeLabel.TextSize = 12
+        TimeLabel.TextXAlignment = Enum.TextXAlignment.Left
+        
+        MethodLabel.Parent = LogEntry
+        MethodLabel.BackgroundTransparency = 1
+        MethodLabel.Position = UDim2.new(0, 10, 0, 25)
+        MethodLabel.Size = UDim2.new(0, 120, 0, 20)
+        MethodLabel.Font = Enum.Font.GothamBold
+        MethodLabel.Text = method
+        MethodLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+        MethodLabel.TextSize = 14
+        MethodLabel.TextXAlignment = Enum.TextXAlignment.Left
+        
+        URLLabel.Parent = LogEntry
+        URLLabel.BackgroundTransparency = 1
+        URLLabel.Position = UDim2.new(0, 10, 0, 45)
+        URLLabel.Size = UDim2.new(1, -120, 0, 20)
+        URLLabel.Font = Enum.Font.Gotham
+        URLLabel.Text = url
+        URLLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+        URLLabel.TextSize = 11
+        URLLabel.TextXAlignment = Enum.TextXAlignment.Left
+        URLLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        
+        CopyButton.Parent = LogEntry
+        CopyButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+        CopyButton.BorderSizePixel = 0
+        CopyButton.Position = UDim2.new(1, -100, 0, 20)
+        CopyButton.Size = UDim2.new(0, 90, 0, 30)
+        CopyButton.Font = Enum.Font.GothamBold
+        CopyButton.Text = "Copy URL"
+        CopyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        CopyButton.TextSize = 12
+        
+        CopyCorner.CornerRadius = UDim.new(0, 5)
+        CopyCorner.Parent = CopyButton
+        
+        CopyButton.MouseButton1Click:Connect(function()
+            setclipboard(url)
+            CopyButton.Text = "Copied!"
+            CopyButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+            wait(1)
+            CopyButton.Text = "Copy URL"
+            CopyButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+        end)
+        
+        LogFrame.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 10)
+        CountLabel.Text = "Requests: " .. #LoggedRequests
+    end
+    
+    -- Button functions
+    CloseButton.MouseButton1Click:Connect(function()
+        ScreenGui:Destroy()
+    end)
+    
+    local minimized = false
+    MinimizeButton.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        if minimized then
+            MainFrame.Size = UDim2.new(0, 650, 0, 45)
+            LogFrame.Visible = false
+            ClearButton.Visible = false
+            CountLabel.Visible = false
+        else
+            MainFrame.Size = UDim2.new(0, 650, 0, 450)
+            LogFrame.Visible = true
+            ClearButton.Visible = true
+            CountLabel.Visible = true
+        end
+    end)
+    
+    ClearButton.MouseButton1Click:Connect(function()
+        for _, child in pairs(LogFrame:GetChildren()) do
+            if child:IsA("Frame") then
+                child:Destroy()
+            end
+        end
+        LogFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+        HttpSpy:ClearLogs()
+        CountLabel.Text = "Requests: 0"
+    end)
+    
+    HttpSpy.AddToUI = AddLogToUI
+    print("[Nexbyte HTTP Spy UI] Loaded")
+end)
+
+return HttpSpy
